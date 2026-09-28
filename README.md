@@ -1,5 +1,7 @@
 # 🏠 HomeLedger — Household & Family Expense Tracker
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fankitatadse%2Fhomeledger)
+
 A modern, fast, and privacy-focused web application designed to track shared household expenses, calculate fair splits among family members, and settle outstanding balances in Indian Rupees (₹).
 
 ---
