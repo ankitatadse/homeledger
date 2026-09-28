@@ -4,6 +4,6 @@
   "private": true,
   "description": "Household & Family Expense Tracker",
   "scripts": {
-    "dev": "node server.js"
+    "dev": "node local-server.js"
   }
 }

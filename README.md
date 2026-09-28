@@ -70,7 +70,7 @@ Double-click [index.html](file:///C:/Users/ankitat/.gemini/antigravity/scratch/h
 ### Method 2: Local Node.js Server
 Open PowerShell in this directory and run:
 ```powershell
-node server.js
+node local-server.js
 ```
 Then visit: **[http://localhost:3000](http://localhost:3000)** in your browser.
 
