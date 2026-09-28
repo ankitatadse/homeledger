@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HomeLedger — Household & Family Expense Tracker</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Canvas Confetti CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+              900: '#064e3b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen antialiased flex flex-col font-sans">
+
+  <!-- Sample Data Banner (Shown only when sample data is loaded) -->
+  <div id="sampleDataBanner" class="bg-gradient-to-r from-emerald-600 to-teal-700 text-white px-4 py-2 text-xs md:text-sm font-medium flex items-center justify-between shadow-sm">
+    <div class="flex items-center gap-2 max-w-7xl mx-auto w-full">
+      <span>✨ <strong>Starter Demo Mode:</strong> Sample family expenses have been pre-loaded to show how splits and settlements work.</span>
+      <div class="flex items-center gap-2 ml-auto">
+        <button id="clearSampleDataBtn" class="bg-white/20 hover:bg-white/30 text-white px-2.5 py-1 rounded-md text-xs font-semibold transition">
+          Clear Demo Data
+        </button>
+        <button id="dismissBannerBtn" class="hover:bg-white/20 p-1 rounded transition text-white/80 hover:text-white" title="Dismiss">
+          ✕
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      <!-- Brand Logo -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 text-xl font-bold">
+          ₹
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl font-bold tracking-tight text-slate-900">HomeLedger</h1>
+            <span class="text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">Shared Family</span>
+          </div>
+          <p class="text-xs text-slate-500 hidden sm:block">Track household expenses, split bills & settle balances</p>
+        </div>
+      </div>
+
+      <!-- Header Actions -->
+      <div class="flex items-center flex-wrap gap-2.5">
+        <!-- Manage Members Button -->
+        <button id="manageMembersBtn" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+          <span>👥</span> Members (<span id="memberCountBadge">2</span>)
+        </button>
+
+        <!-- Settle Up Button -->
+        <button id="openSettleModalBtn" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition">
+          <span>🤝</span> Settle Up
+        </button>
+
+        <!-- Add Expense Primary Button -->
+        <button id="openAddExpenseBtn" class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm shadow-emerald-600/30 rounded-lg transition active:scale-95">
+          <span>➕</span> Add Expense
+        </button>
+
+        <!-- Dropdown Menu / Settings -->
+        <div class="relative inline-block text-left">
+          <button id="moreActionsBtn" class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition" title="More Options">
+            ⚙️
+          </button>
+          <div id="moreActionsMenu" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-50 text-xs">
+            <button id="exportCsvBtn" class="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 flex items-center gap-2">
+              📊 Export to Excel / CSV
+            </button>
+            <button id="exportJsonBtn" class="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 flex items-center gap-2">
+              💾 Backup Data (JSON)
+            </button>
+            <label class="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 flex items-center gap-2 cursor-pointer">
+              📥 Restore from Backup
+              <input type="file" id="importJsonInput" accept=".json" class="hidden">
+            </label>
+            <button id="printReportBtn" class="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 flex items-center gap-2">
+              🖨️ Print Monthly Report
+            </button>
+            <div class="border-t border-slate-100 my-1"></div>
+            <button id="setBudgetBtn" class="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 flex items-center gap-2">
+              🎯 Set Monthly Budget
+            </button>
+            <button id="resetAllDataBtn" class="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2">
+              🗑️ Reset All Data
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+
+    <!-- Active Month & Period Filter Bar -->
+    <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <span class="text-sm font-semibold text-slate-600">Showing expenses for:</span>
+        <select id="periodFilterSelect" class="bg-slate-50 border border-slate-300 text-slate-800 text-sm font-semibold rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer">
+          <option value="this-month">This Month</option>
+          <option value="last-month">Last Month</option>
+          <option value="last-3-months">Last 3 Months</option>
+          <option value="all-time">All Time</option>
+        </select>
+        <span id="currentPeriodLabel" class="text-xs text-slate-400 font-medium"></span>
+      </div>
+
+      <!-- Quick Members Avatar Strip -->
+      <div class="flex items-center gap-2" id="headerMembersStrip">
+        <!-- Rendered dynamically via JS -->
+      </div>
+    </div>
+
+    <!-- KPI Summary Cards Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Total Spend Card -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between relative overflow-hidden">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Spent</span>
+          <span class="p-2 bg-emerald-50 text-emerald-600 rounded-xl text-base">💰</span>
+        </div>
+        <div>
+          <div id="kpiTotalSpend" class="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">₹0.00</div>
+          <div class="text-xs text-slate-500 mt-1" id="kpiExpenseCount">0 transactions recorded</div>
+        </div>
+        <div class="absolute -bottom-6 -right-6 w-20 h-20 bg-emerald-500/5 rounded-full pointer-events-none"></div>
+      </div>
+
+      <!-- Your Paid vs Share -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between relative overflow-hidden">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">You Paid</span>
+          <span class="p-2 bg-blue-50 text-blue-600 rounded-xl text-base">💳</span>
+        </div>
+        <div>
+          <div id="kpiYouPaid" class="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">₹0.00</div>
+          <div class="text-xs text-slate-500 mt-1" id="kpiYouFairShare">Your fair share: ₹0.00</div>
+        </div>
+        <div class="absolute -bottom-6 -right-6 w-20 h-20 bg-blue-500/5 rounded-full pointer-events-none"></div>
+      </div>
+
+      <!-- Settlement Status / Net Balance for You -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between relative overflow-hidden">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Your Net Balance</span>
+          <span id="kpiNetBalanceIcon" class="p-2 bg-slate-50 text-slate-600 rounded-xl text-base">⚖️</span>
+        </div>
+        <div>
+          <div id="kpiNetBalance" class="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">₹0.00</div>
+          <div class="text-xs mt-1 font-semibold" id="kpiNetBalanceDesc">All settled up</div>
+        </div>
+        <div class="absolute -bottom-6 -right-6 w-20 h-20 bg-purple-500/5 rounded-full pointer-events-none"></div>
+      </div>
+
+      <!-- Monthly Budget Tracker -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between relative overflow-hidden">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Monthly Budget</span>
+          <button id="quickEditBudgetBtn" class="text-xs text-emerald-600 hover:text-emerald-700 font-semibold" title="Edit Budget">Edit</button>
+        </div>
+        <div>
+          <div class="flex items-baseline justify-between">
+            <span id="kpiBudgetUsed" class="text-xl font-extrabold text-slate-900">₹0</span>
+            <span id="kpiBudgetTotal" class="text-xs font-semibold text-slate-400">of ₹40,000</span>
+          </div>
+          <!-- Progress bar -->
+          <div class="w-full bg-slate-100 rounded-full h-2.5 mt-2 overflow-hidden">
+            <div id="budgetProgressBar" class="bg-emerald-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+          <div class="flex justify-between items-center text-[11px] text-slate-500 mt-1">
+            <span id="budgetPercentageText">0% spent</span>
+            <span id="budgetRemainingText" class="font-medium">₹40,000 left</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settlement Section: "Who Owes Whom" & Settlement Recommendations -->
+    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span>⚖️</span> Fair Split & Debt Settlements
+          </h2>
+          <p class="text-xs text-slate-500">Calculated automatically based on who paid and who shared each expense</p>
+        </div>
+        <button id="settleShortcutBtn" class="text-xs font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition inline-flex items-center gap-1.5">
+          <span>⚡</span> Record a Payment / Settle
+        </button>
+      </div>
+
+      <!-- Debt Recommendations Box -->
+      <div id="settlementRecommendationsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Detailed Member Balances Table Accordion/Toggle -->
+      <div class="border-t border-slate-100 pt-3">
+        <details class="group">
+          <summary class="text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer flex items-center justify-between list-none">
+            <span>View detailed member contribution breakdown</span>
+            <span class="group-open:rotate-180 transition-transform text-slate-400">▼</span>
+          </summary>
+          <div class="mt-3 overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="border-b border-slate-200 text-slate-400 font-semibold uppercase tracking-wider">
+                  <th class="py-2 px-3">Family Member</th>
+                  <th class="py-2 px-3 text-right">Total Paid</th>
+                  <th class="py-2 px-3 text-right">Fair Share</th>
+                  <th class="py-2 px-3 text-right">Net Balance</th>
+                  <th class="py-2 px-3 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody id="memberBalancesTableBody" class="divide-y divide-slate-100">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- Charts & Analytics Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- Category Breakdown Chart (5 cols) -->
+      <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <span>📊</span> Spending by Category
+          </h3>
+          <span class="text-[11px] font-semibold text-slate-400" id="categoryChartTotalBadge"></span>
+        </div>
+        <div class="relative flex-1 min-h-[260px] flex items-center justify-center">
+          <canvas id="categoryDoughnutChart"></canvas>
+          <div id="categoryChartEmptyState" class="hidden absolute text-center text-xs text-slate-400">
+            No expenses recorded for this period
+          </div>
+        </div>
+        <!-- Category Top List -->
+        <div id="topCategoriesList" class="mt-4 space-y-2 border-t border-slate-100 pt-3 max-h-48 overflow-y-auto pr-1">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- Monthly Trend & Member Share (7 cols) -->
+      <div class="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <span>📈</span> Household Spending Trend
+          </h3>
+          <div class="flex items-center bg-slate-100 rounded-lg p-0.5 text-xs font-semibold">
+            <button id="chartViewMonthlyBtn" class="px-2.5 py-1 rounded-md bg-white text-slate-800 shadow-xs transition">Monthly</button>
+            <button id="chartViewMemberBtn" class="px-2.5 py-1 rounded-md text-slate-500 hover:text-slate-800 transition">By Member</button>
+          </div>
+        </div>
+        <div class="relative flex-1 min-h-[260px]">
+          <canvas id="trendBarChart"></canvas>
+          <div id="trendChartEmptyState" class="hidden absolute inset-0 flex items-center justify-center text-xs text-slate-400">
+            Add expenses to see spending trends
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Expenses List & Management Section -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      <!-- Table Header & Controls -->
+      <div class="p-5 border-b border-slate-100 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+              <span>🧾</span> Expense Records & History
+            </h2>
+            <p class="text-xs text-slate-500" id="filterStatusText">Showing all records</p>
+          </div>
+
+          <!-- Add Expense Button -->
+          <button id="addExpenseSecondaryBtn" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition shadow-xs">
+            <span>➕</span> Add New Expense
+          </button>
+        </div>
+
+        <!-- Filters Row -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 pt-1">
+          <!-- Search input -->
+          <div class="relative">
+            <input type="text" id="expenseSearchInput" placeholder="Search description, notes..." class="w-full bg-slate-50 border border-slate-200 text-xs rounded-lg pl-8 pr-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <span class="absolute left-2.5 top-2.5 text-xs text-slate-400">🔍</span>
+          </div>
+
+          <!-- Category Filter -->
+          <select id="categoryFilterSelect" class="bg-slate-50 border border-slate-200 text-xs rounded-lg px-3 py-2 text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <option value="all">All Categories</option>
+            <!-- Categories dynamically injected -->
+          </select>
+
+          <!-- Paid By Filter -->
+          <select id="paidByFilterSelect" class="bg-slate-50 border border-slate-200 text-xs rounded-lg px-3 py-2 text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <option value="all">Paid by: Anyone</option>
+            <!-- Members dynamically injected -->
+          </select>
+
+          <!-- Sort Order -->
+          <select id="sortFilterSelect" class="bg-slate-50 border border-slate-200 text-xs rounded-lg px-3 py-2 text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <option value="date-desc">Date: Newest First</option>
+            <option value="date-asc">Date: Oldest First</option>
+            <option value="amount-desc">Amount: Highest First</option>
+            <option value="amount-asc">Amount: Lowest First</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Expense Table (Desktop) / Cards (Mobile) -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs min-w-[700px]">
+          <thead class="bg-slate-50/75 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
+            <tr>
+              <th class="py-3 px-4">Date</th>
+              <th class="py-3 px-4">Expense Details</th>
+              <th class="py-3 px-4">Category</th>
+              <th class="py-3 px-4">Paid By</th>
+              <th class="py-3 px-4">Split With</th>
+              <th class="py-3 px-4 text-right">Total Amount</th>
+              <th class="py-3 px-4 text-right">Your Share</th>
+              <th class="py-3 px-4 text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="expensesTableBody" class="divide-y divide-slate-100">
+            <!-- Dynamically populated -->
+          </tbody>
+        </table>
+
+        <!-- Empty state when no expenses match -->
+        <div id="noExpensesState" class="hidden p-12 text-center">
+          <div class="text-4xl mb-3">🧾</div>
+          <h4 class="text-sm font-bold text-slate-800">No expenses found</h4>
+          <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">No records match the current filter. Try resetting filters or add a new expense.</p>
+          <button id="resetFiltersBtn" class="mt-4 px-3 py-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition">
+            Reset Filters
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 py-5 mt-auto text-xs text-slate-500">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-slate-700">HomeLedger</span>
+        <span>•</span>
+        <span>Equal split & debt settlement for households</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <span>Data stored locally on your device</span>
+        <span>•</span>
+        <button id="quickExportCsv" class="hover:text-emerald-600 font-medium transition">Download CSV</button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- Modal 1: Add / Edit Expense Modal -->
+  <div id="expenseModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scaleUp">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 id="expenseModalTitle" class="text-base font-bold text-slate-900">Add Household Expense</h3>
+        <button id="closeExpenseModalBtn" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg text-lg">✕</button>
+      </div>
+
+      <form id="expenseForm" class="space-y-4 text-xs">
+        <input type="hidden" id="editExpenseId">
+
+        <!-- Title -->
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1" for="expenseTitle">Description / Item *</label>
+          <input type="text" id="expenseTitle" required placeholder="e.g. DMart Monthly Groceries, WiFi bill, Milk" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+        </div>
+
+        <!-- Amount & Date (2 columns) -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1" for="expenseAmount">Amount (₹) *</label>
+            <div class="relative">
+              <span class="absolute left-3 top-2 text-slate-400 font-bold text-sm">₹</span>
+              <input type="number" id="expenseAmount" step="0.01" min="0.01" required placeholder="0.00" class="w-full bg-slate-50 border border-slate-300 rounded-lg pl-7 pr-3 py-2 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1" for="expenseDate">Date *</label>
+            <input type="date" id="expenseDate" required class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+        </div>
+
+        <!-- Category -->
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1" for="expenseCategory">Category *</label>
+          <select id="expenseCategory" required class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <!-- Injected dynamically -->
+          </select>
+        </div>
+
+        <!-- Paid By -->
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1" for="expensePaidBy">Who paid? *</label>
+          <select id="expensePaidBy" required class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <!-- Injected dynamically -->
+          </select>
+        </div>
+
+        <!-- Split Among Members (Checkboxes) -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block font-semibold text-slate-700">Split among who? *</label>
+            <button type="button" id="selectAllMembersBtn" class="text-[11px] text-emerald-600 font-semibold hover:underline">Select All</button>
+          </div>
+          <div id="splitMembersCheckboxList" class="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+            <!-- Injected dynamically -->
+          </div>
+          <p id="splitSharePreview" class="text-[11px] text-slate-500 mt-1 font-medium italic">
+            Each person's share: ₹0.00
+          </p>
+        </div>
+
+        <!-- Notes (optional) -->
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1" for="expenseNotes">Notes / Receipt details (optional)</label>
+          <input type="text" id="expenseNotes" placeholder="e.g. Paid via UPI, bill attached" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+        </div>
+
+        <!-- Modal Action Buttons -->
+        <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+          <button type="button" id="cancelExpenseModalBtn" class="px-4 py-2 text-slate-600 hover:text-slate-800 font-semibold rounded-lg hover:bg-slate-100 transition">
+            Cancel
+          </button>
+          <button type="submit" class="px-5 py-2 text-white bg-emerald-600 hover:bg-emerald-700 font-bold rounded-lg shadow-sm shadow-emerald-600/30 transition">
+            Save Expense
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: Settle Up Modal -->
+  <div id="settleModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scaleUp">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <span>🤝</span> Settle Outstanding Balance
+        </h3>
+        <button id="closeSettleModalBtn" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg text-lg">✕</button>
+      </div>
+
+      <form id="settleForm" class="space-y-4 text-xs">
+        <p class="text-slate-500">Record a direct payment between family members (via UPI, cash, bank transfer) to balance debts.</p>
+
+        <!-- Payer (Who is paying) -->
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1" for="settlePayer">Who paid? (Debtor) *</label>
+          <select id="settlePayer" required class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <!-- Injected dynamically -->
+          </select>
+        </div>
+
+        <!-- Receiver (Who is receiving) -->
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1" for="settleReceiver">Paid to? (Creditor) *</label>
+          <select id="settleReceiver" required class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <!-- Injected dynamically -->
+          </select>
+        </div>
+
+        <!-- Amount & Date -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1" for="settleAmount">Amount (₹) *</label>
+            <div class="relative">
+              <span class="absolute left-3 top-2 text-slate-400 font-bold text-sm">₹</span>
+              <input type="number" id="settleAmount" step="0.01" min="0.01" required placeholder="0.00" class="w-full bg-slate-50 border border-slate-300 rounded-lg pl-7 pr-3 py-2 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1" for="settleDate">Date *</label>
+            <input type="date" id="settleDate" required class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+        </div>
+
+        <!-- Note -->
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1" for="settleNotes">Payment Method / Note</label>
+          <input type="text" id="settleNotes" placeholder="e.g. Paid via GooglePay / PhonePe / Cash" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+          <button type="button" id="cancelSettleModalBtn" class="px-4 py-2 text-slate-600 hover:text-slate-800 font-semibold rounded-lg hover:bg-slate-100 transition">
+            Cancel
+          </button>
+          <button type="submit" class="px-5 py-2 text-white bg-indigo-600 hover:bg-indigo-700 font-bold rounded-lg shadow-sm shadow-indigo-600/30 transition">
+            Record Settlement
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 3: Manage Family Members Modal -->
+  <div id="membersModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scaleUp">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <span>👥</span> Manage Family Members
+        </h3>
+        <button id="closeMembersModalBtn" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg text-lg">✕</button>
+      </div>
+
+      <!-- Add New Member Form -->
+      <form id="addMemberForm" class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2.5 text-xs">
+        <span class="font-bold text-slate-700 block">Add New Member</span>
+        <div class="flex gap-2">
+          <select id="newMemberAvatar" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-base">
+            <option value="👨‍💼">👨‍💼 You</option>
+            <option value="👩‍💼">👩‍💼 Partner</option>
+            <option value="🧑">🧑 Sibling</option>
+            <option value="👴">👴 Parent (Father)</option>
+            <option value="👵">👵 Parent (Mother)</option>
+            <option value="👶">👶 Child</option>
+            <option value="🏠">🏠 Roommate</option>
+          </select>
+          <input type="text" id="newMemberName" required placeholder="Member name (e.g. Rahul, Priya, Mom)" class="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg transition">
+            Add
+          </button>
+        </div>
+      </form>
+
+      <!-- Member List -->
+      <div class="space-y-2 text-xs">
+        <span class="font-semibold text-slate-500 block uppercase tracking-wider text-[11px]">Current Members</span>
+        <div id="membersListContainer" class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-3 border-t border-slate-100">
+        <button type="button" id="doneMembersModalBtn" class="px-5 py-2 text-white bg-slate-800 hover:bg-slate-900 font-bold rounded-lg text-xs transition">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Monthly Budget Modal -->
+  <div id="budgetModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scaleUp">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <span>🎯</span> Monthly Household Budget
+        </h3>
+        <button id="closeBudgetModalBtn" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg text-lg">✕</button>
+      </div>
+
+      <form id="budgetForm" class="space-y-4 text-xs">
+        <p class="text-slate-500">Set a target spending limit for your household to monitor monthly budget health.</p>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1" for="monthlyBudgetInput">Target Limit (₹) *</label>
+          <div class="relative">
+            <span class="absolute left-3 top-2 text-slate-400 font-bold text-sm">₹</span>
+            <input type="number" id="monthlyBudgetInput" min="500" step="500" required class="w-full bg-slate-50 border border-slate-300 rounded-lg pl-7 pr-3 py-2 text-base font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+          <button type="button" id="cancelBudgetModalBtn" class="px-4 py-2 text-slate-600 hover:text-slate-800 font-semibold rounded-lg hover:bg-slate-100 transition">
+            Cancel
+          </button>
+          <button type="submit" class="px-5 py-2 text-white bg-emerald-600 hover:bg-emerald-700 font-bold rounded-lg shadow-sm shadow-emerald-600/30 transition">
+            Save Budget
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Main JavaScript -->
+  <script src="app.js"></script>
+</body>
+</html>

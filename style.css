@@ -1,0 +1,93 @@
+/* Custom Styles & Refinements for HomeLedger */
+
+/* Smooth animations */
+@keyframes scaleUp {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-scaleUp {
+  animation: scaleUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Number display polish */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Card hover transitions */
+.expense-card-hover {
+  transition: all 0.2s ease-in-out;
+}
+
+.expense-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+}
+
+/* Print Styles for Printable Expense Reports */
+@media print {
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+
+  header,
+  #sampleDataBanner,
+  #moreActionsBtn,
+  #openAddExpenseBtn,
+  #openSettleModalBtn,
+  #manageMembersBtn,
+  #settleShortcutBtn,
+  #addExpenseSecondaryBtn,
+  .no-print,
+  footer,
+  #expenseModal,
+  #settleModal,
+  #membersModal,
+  #budgetModal,
+  #toastContainer {
+    display: none !important;
+  }
+
+  main {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .shadow-xs, .shadow-sm, .shadow-md, .shadow-lg {
+    box-shadow: none !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+
+  table {
+    width: 100% !important;
+  }
+}
