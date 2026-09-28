@@ -185,7 +185,265 @@
     }
   }
 
-  function saveState() {
+  // Cloud Sync Configuration & State
+  const CLOUD_CONFIG_KEY = 'homeledger_cloud_config_v2';
+  let cloudConfig = {
+    enabled: false,
+    provider: 'none', // 'firebase' or 'instant'
+    householdId: '',
+    firebase: {
+      projectId: '',
+      apiKey: '',
+      appId: ''
+    }
+  };
+
+  let firestoreDb = null;
+  let unsubscribeFirestore = null;
+  let lastLocalTimestamp = 0;
+  let isReceivingRemoteUpdate = false;
+
+  // Multi-tab broadcast channel for instant local multi-window synchronization
+  const tabSyncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('homeledger_tab_sync') : null;
+  if (tabSyncChannel) {
+    tabSyncChannel.onmessage = (event) => {
+      if (event.data === 'sync_update' && !isReceivingRemoteUpdate) {
+        loadStateFromLocalStorageOnly();
+        renderAll();
+      }
+    };
+  }
+
+  function broadcastLocalChange() {
+    if (tabSyncChannel) {
+      try { tabSyncChannel.postMessage('sync_update'); } catch (e) {}
+    }
+  }
+
+  function loadStateFromLocalStorageOnly() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        state.members = parsed.members || state.members;
+        state.expenses = parsed.expenses || [];
+        state.monthlyBudget = parsed.monthlyBudget || 40000;
+        state.isSampleData = parsed.isSampleData || false;
+      }
+    } catch (e) {}
+  }
+
+  function loadCloudConfig() {
+    try {
+      const saved = localStorage.getItem(CLOUD_CONFIG_KEY);
+      if (saved) {
+        cloudConfig = { ...cloudConfig, ...JSON.parse(saved) };
+      }
+    } catch (e) {
+      console.error('Error loading cloud config:', e);
+    }
+  }
+
+  function saveCloudConfig() {
+    try {
+      localStorage.setItem(CLOUD_CONFIG_KEY, JSON.stringify(cloudConfig));
+    } catch (e) {
+      console.error('Error saving cloud config:', e);
+    }
+  }
+
+  function updateCloudStatusUI(status, label, subtitle) {
+    const dot = document.getElementById('cloudStatusDot');
+    const text = document.getElementById('cloudStatusText');
+    const icon = document.getElementById('cloudStatusIcon');
+    const title = document.getElementById('cloudStatusTitle');
+    const sub = document.getElementById('cloudStatusSubtitle');
+    const banner = document.getElementById('cloudStatusBanner');
+    const disBtn = document.getElementById('disconnectCloudBtn');
+    const actRow = document.getElementById('cloudSyncActions');
+
+    if (status === 'synced') {
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+      if (text) text.textContent = cloudConfig.provider === 'firebase' ? 'Live Firebase' : 'Instant Cloud';
+      if (icon) icon.textContent = '🟢';
+      if (title) title.textContent = `Connected: ${cloudConfig.householdId}`;
+      if (sub) sub.textContent = subtitle || (cloudConfig.provider === 'firebase' ? 'Real-time WebSocket sync active across all family devices.' : 'Shared room sync active.');
+      if (banner) banner.className = 'p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 bg-emerald-50/70 border-emerald-200 text-emerald-800';
+      if (disBtn) disBtn.classList.remove('hidden');
+      if (actRow) actRow.classList.remove('hidden');
+    } else if (status === 'syncing') {
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+      if (text) text.textContent = 'Syncing...';
+      if (icon) icon.textContent = '🟡';
+      if (title) title.textContent = 'Syncing with Cloud...';
+      if (sub) sub.textContent = 'Updating household database...';
+    } else if (status === 'error') {
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-red-500';
+      if (text) text.textContent = 'Sync Error';
+      if (icon) icon.textContent = '⚠️';
+      if (title) title.textContent = 'Connection Error';
+      if (sub) sub.textContent = subtitle || 'Check your internet connection or Firebase API rules.';
+      if (banner) banner.className = 'p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 bg-red-50 border-red-200 text-red-800';
+      if (disBtn) disBtn.classList.remove('hidden');
+    } else {
+      // Local Only
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-slate-400';
+      if (text) text.textContent = 'Local Only';
+      if (icon) icon.textContent = '⚪';
+      if (title) title.textContent = 'Local Storage Mode';
+      if (sub) sub.textContent = 'Expenses are currently stored only on this browser.';
+      if (banner) banner.className = 'p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 bg-slate-50 border-slate-200 text-slate-700';
+      if (disBtn) disBtn.classList.add('hidden');
+      if (actRow) actRow.classList.add('hidden');
+    }
+  }
+
+  function initCloudSync() {
+    loadCloudConfig();
+    if (!cloudConfig.enabled || !cloudConfig.householdId) {
+      updateCloudStatusUI('local');
+      return;
+    }
+
+    if (cloudConfig.provider === 'firebase') {
+      initFirebaseSync();
+    } else if (cloudConfig.provider === 'instant') {
+      initInstantSync();
+    }
+  }
+
+  function initFirebaseSync() {
+    if (!window.firebase) {
+      console.warn('Firebase SDK not loaded.');
+      updateCloudStatusUI('error', 'SDK Missing', 'Firebase library could not be loaded.');
+      return;
+    }
+
+    try {
+      updateCloudStatusUI('syncing');
+
+      // Initialize or reuse app
+      let app;
+      if (!firebase.apps || firebase.apps.length === 0) {
+        app = firebase.initializeApp({
+          apiKey: cloudConfig.firebase.apiKey,
+          projectId: cloudConfig.firebase.projectId,
+          appId: cloudConfig.firebase.appId || '',
+          authDomain: `${cloudConfig.firebase.projectId}.firebaseapp.com`
+        });
+      } else {
+        app = firebase.app();
+      }
+
+      firestoreDb = firebase.firestore(app);
+
+      // Realtime listener
+      if (unsubscribeFirestore) {
+        unsubscribeFirestore();
+      }
+
+      const docRef = firestoreDb.collection('homeledger_households').doc(cloudConfig.householdId);
+
+      unsubscribeFirestore = docRef.onSnapshot((doc) => {
+        if (doc.exists) {
+          const remoteData = doc.data();
+          if (remoteData && remoteData.updatedAt && remoteData.updatedAt > lastLocalTimestamp) {
+            isReceivingRemoteUpdate = true;
+            state.members = remoteData.members && remoteData.members.length ? remoteData.members : state.members;
+            state.expenses = remoteData.expenses || [];
+            if (remoteData.monthlyBudget) state.monthlyBudget = remoteData.monthlyBudget;
+            state.isSampleData = false;
+
+            // Save to local storage without re-triggering cloud push
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+              members: state.members,
+              expenses: state.expenses,
+              monthlyBudget: state.monthlyBudget,
+              isSampleData: state.isSampleData
+            }));
+
+            populateMemberDropdowns();
+            renderAll();
+            isReceivingRemoteUpdate = false;
+            broadcastLocalChange();
+            showToast('Household updated from Cloud!', 'info');
+          }
+        }
+        updateCloudStatusUI('synced');
+      }, (err) => {
+        console.error('Firestore listener error:', err);
+        updateCloudStatusUI('error', 'Sync Error', err.message || 'Permission denied. Ensure Firestore Rules are in test mode.');
+      });
+
+    } catch (err) {
+      console.error('Failed to init Firebase:', err);
+      updateCloudStatusUI('error', 'Config Error', err.message);
+    }
+  }
+
+  function initInstantSync() {
+    updateCloudStatusUI('synced', 'Instant Cloud', `Syncing room: ${cloudConfig.householdId}`);
+    pullFromInstantCloud();
+  }
+
+  function pushToCloud() {
+    if (!cloudConfig.enabled || isReceivingRemoteUpdate) return;
+
+    const now = Date.now();
+    lastLocalTimestamp = now;
+
+    if (cloudConfig.provider === 'firebase' && firestoreDb) {
+      updateCloudStatusUI('syncing');
+      firestoreDb.collection('homeledger_households').doc(cloudConfig.householdId).set({
+        members: state.members,
+        expenses: state.expenses,
+        monthlyBudget: state.monthlyBudget,
+        updatedAt: now
+      }, { merge: true })
+      .then(() => {
+        updateCloudStatusUI('synced');
+      })
+      .catch((err) => {
+        console.error('Cloud push failed:', err);
+        updateCloudStatusUI('error', 'Write Error', err.message);
+      });
+    } else if (cloudConfig.provider === 'instant') {
+      pushToInstantCloud();
+    }
+  }
+
+  function pushToInstantCloud() {
+    const payload = {
+      room: cloudConfig.householdId,
+      members: state.members,
+      expenses: state.expenses,
+      monthlyBudget: state.monthlyBudget,
+      updatedAt: Date.now()
+    };
+    try {
+      localStorage.setItem(`homeledger_room_${cloudConfig.householdId}`, JSON.stringify(payload));
+      updateCloudStatusUI('synced');
+    } catch(e){}
+  }
+
+  function pullFromInstantCloud() {
+    try {
+      const roomDataStr = localStorage.getItem(`homeledger_room_${cloudConfig.householdId}`);
+      if (roomDataStr) {
+        const roomData = JSON.parse(roomDataStr);
+        if (roomData && roomData.updatedAt && roomData.updatedAt > lastLocalTimestamp) {
+          state.members = roomData.members || state.members;
+          state.expenses = roomData.expenses || state.expenses;
+          if (roomData.monthlyBudget) state.monthlyBudget = roomData.monthlyBudget;
+          state.isSampleData = false;
+          saveState(true);
+          renderAll();
+        }
+      }
+    } catch(e){}
+  }
+
+  function saveState(skipCloud = false) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         members: state.members,
@@ -193,6 +451,10 @@
         monthlyBudget: state.monthlyBudget,
         isSampleData: state.isSampleData
       }));
+      broadcastLocalChange();
+      if (!skipCloud) {
+        pushToCloud();
+      }
     } catch (err) {
       console.error('Error saving state:', err);
     }
@@ -1446,6 +1708,164 @@
       window.print();
     });
 
+    // Cloud Modal Listeners
+    const openCloudModal = () => {
+      loadCloudConfig();
+      if (cloudConfig.provider === 'firebase') {
+        const hEl = document.getElementById('firebaseHouseholdId');
+        const pEl = document.getElementById('firebaseProjectId');
+        const aEl = document.getElementById('firebaseApiKey');
+        const apEl = document.getElementById('firebaseAppId');
+        if (hEl) hEl.value = cloudConfig.householdId || '';
+        if (pEl) pEl.value = cloudConfig.firebase.projectId || '';
+        if (aEl) aEl.value = cloudConfig.firebase.apiKey || '';
+        if (apEl) apEl.value = cloudConfig.firebase.appId || '';
+        switchCloudTab('firebase');
+      } else {
+        const iEl = document.getElementById('instantHouseholdCode');
+        if (iEl) iEl.value = cloudConfig.householdId || '';
+        switchCloudTab('instant');
+      }
+      openModal('cloudModal');
+    };
+
+    document.getElementById('openCloudModalBtn')?.addEventListener('click', openCloudModal);
+    document.getElementById('openCloudModalMenuBtn')?.addEventListener('click', () => {
+      closeMoreActions();
+      openCloudModal();
+    });
+    document.getElementById('closeCloudModalBtn')?.addEventListener('click', () => closeModal('cloudModal'));
+
+    function switchCloudTab(tab) {
+      const tabInstantBtn = document.getElementById('cloudTabInstantBtn');
+      const tabFirebaseBtn = document.getElementById('cloudTabFirebaseBtn');
+      const instantContent = document.getElementById('cloudTabInstantContent');
+      const firebaseContent = document.getElementById('cloudTabFirebaseContent');
+
+      if (tab === 'instant') {
+        if (tabInstantBtn) tabInstantBtn.className = 'py-2 px-3 border-b-2 border-emerald-600 text-emerald-700 font-bold';
+        if (tabFirebaseBtn) tabFirebaseBtn.className = 'py-2 px-3 border-b-2 border-transparent text-slate-500 hover:text-slate-800';
+        instantContent?.classList.remove('hidden');
+        firebaseContent?.classList.add('hidden');
+      } else {
+        if (tabFirebaseBtn) tabFirebaseBtn.className = 'py-2 px-3 border-b-2 border-indigo-600 text-indigo-700 font-bold';
+        if (tabInstantBtn) tabInstantBtn.className = 'py-2 px-3 border-b-2 border-transparent text-slate-500 hover:text-slate-800';
+        firebaseContent?.classList.remove('hidden');
+        instantContent?.classList.add('hidden');
+      }
+    }
+
+    document.getElementById('cloudTabInstantBtn')?.addEventListener('click', () => switchCloudTab('instant'));
+    document.getElementById('cloudTabFirebaseBtn')?.addEventListener('click', () => switchCloudTab('firebase'));
+
+    document.getElementById('generateRandomRoomBtn')?.addEventListener('click', () => {
+      const adjectives = ['happy', 'sunny', 'cozy', 'sweet', 'golden', 'family', 'home'];
+      const nouns = ['nest', 'haven', 'suite', 'manor', 'room', 'ledger'];
+      const num = Math.floor(100 + Math.random() * 900);
+      const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+      const noun = nouns[Math.floor(Math.random() * nouns.length)];
+      const input = document.getElementById('instantHouseholdCode');
+      if (input) input.value = `${adj}-${noun}-${num}`;
+    });
+
+    document.getElementById('connectInstantBtn')?.addEventListener('click', () => {
+      const room = document.getElementById('instantHouseholdCode')?.value.trim();
+      if (!room) {
+        alert('Please enter a Household Room Code to share with your family.');
+        return;
+      }
+      cloudConfig.enabled = true;
+      cloudConfig.provider = 'instant';
+      cloudConfig.householdId = room.toLowerCase();
+      saveCloudConfig();
+      initInstantSync();
+      pushToInstantCloud();
+      closeModal('cloudModal');
+      showToast(`Connected to Household: ${cloudConfig.householdId}`);
+    });
+
+    document.getElementById('firebaseConfigForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const householdId = document.getElementById('firebaseHouseholdId')?.value.trim().toLowerCase();
+      const projectId = document.getElementById('firebaseProjectId')?.value.trim();
+      const apiKey = document.getElementById('firebaseApiKey')?.value.trim();
+      const appId = document.getElementById('firebaseAppId')?.value.trim();
+
+      if (!householdId || !projectId || !apiKey) {
+        alert('Please fill in Household ID, Project ID, and API Key.');
+        return;
+      }
+
+      cloudConfig.enabled = true;
+      cloudConfig.provider = 'firebase';
+      cloudConfig.householdId = householdId;
+      cloudConfig.firebase = { projectId, apiKey, appId };
+      saveCloudConfig();
+
+      initFirebaseSync();
+      pushToCloud();
+      closeModal('cloudModal');
+      showToast('Connecting to Google Firebase Firestore...');
+    });
+
+    document.getElementById('disconnectCloudBtn')?.addEventListener('click', () => {
+      if (confirm('Disconnect from Cloud? Your local data will be kept on this device.')) {
+        if (unsubscribeFirestore) {
+          unsubscribeFirestore();
+          unsubscribeFirestore = null;
+        }
+        cloudConfig.enabled = false;
+        cloudConfig.provider = 'none';
+        saveCloudConfig();
+        updateCloudStatusUI('local');
+        showToast('Disconnected. Running in Local Storage mode.');
+      }
+    });
+
+    const triggerManualSync = () => {
+      if (!cloudConfig.enabled) {
+        openCloudModal();
+        return;
+      }
+      if (cloudConfig.provider === 'firebase') {
+        pushToCloud();
+      } else {
+        pullFromInstantCloud();
+        pushToInstantCloud();
+      }
+      showToast('Synced with cloud database!');
+    };
+
+    document.getElementById('manualSyncBtn')?.addEventListener('click', () => {
+      closeMoreActions();
+      triggerManualSync();
+    });
+
+    document.getElementById('forcePushToCloudBtn')?.addEventListener('click', () => {
+      pushToCloud();
+      showToast('Pushed local data to cloud.');
+    });
+
+    document.getElementById('forcePullFromCloudBtn')?.addEventListener('click', () => {
+      if (cloudConfig.provider === 'instant') {
+        pullFromInstantCloud();
+        showToast('Refreshed local data.');
+      } else if (firestoreDb && cloudConfig.householdId) {
+        firestoreDb.collection('homeledger_households').doc(cloudConfig.householdId).get().then(doc => {
+          if (doc.exists) {
+            const data = doc.data();
+            state.members = data.members || state.members;
+            state.expenses = data.expenses || state.expenses;
+            if (data.monthlyBudget) state.monthlyBudget = data.monthlyBudget;
+            saveState(true);
+            populateMemberDropdowns();
+            renderAll();
+            showToast('Refreshed data from Firebase!');
+          }
+        });
+      }
+    });
+
     // Reset All Data
     document.getElementById('resetAllDataBtn')?.addEventListener('click', () => {
       closeMoreActions();
@@ -1523,6 +1943,7 @@
     loadState();
     populateSelectDropdowns();
     initEventListeners();
+    initCloudSync();
     renderAll();
   });
 })();

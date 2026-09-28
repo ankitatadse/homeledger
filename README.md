@@ -40,7 +40,27 @@ A modern, fast, and privacy-focused web application designed to track shared hou
 
 ---
 
-## 🚀 How to Run
+## ☁️ Free Cloud Database & Live Multi-Device Sync
+
+HomeLedger supports two simple ways to sync expenses across all family members' devices in real time:
+
+### Option 1: Instant Household Room Code (Zero Setup)
+1. In HomeLedger, click **"Local Only"** or ⚙️ > **Cloud Sync Settings**.
+2. Under **Instant Cloud Sync**, enter a shared Household Room Code (e.g. `sharma-family-2026`).
+3. Open the app on your family member's phone or computer (or your live Vercel link), and enter the **exact same room code**.
+4. Both devices are now linked to the same shared household ledger!
+
+### Option 2: Google Firebase Firestore (Real-Time Live WebSockets)
+For instant live screen updates without refreshing:
+1. Create a free project at [Firebase Console](https://console.firebase.google.com) (100% free Spark plan).
+2. Go to **Firestore Database** > Create Database (Start in *Test Mode*).
+3. Under Project Settings, click **Web app (</>)** and copy your `projectId` and `apiKey`.
+4. Paste them into HomeLedger under **Google Firebase Firestore** tab.
+5. All devices now enjoy real-time WebSocket live sync!
+
+---
+
+## 🚀 How to Run Locally
 
 ### Method 1: Instant Browser Launch (No server needed)
 Double-click [index.html](file:///C:/Users/ankitat/.gemini/antigravity/scratch/home-expense-tracker/index.html) or right-click and choose **Open with > Chrome / Edge / Firefox**.
@@ -51,6 +71,19 @@ Open PowerShell in this directory and run:
 node server.js
 ```
 Then visit: **[http://localhost:3000](http://localhost:3000)** in your browser.
+
+---
+
+## 🌐 Deploy to Vercel (Free)
+
+1. Push this project to a GitHub repository:
+   ```powershell
+   git remote add origin https://github.com/<username>/homeledger.git
+   git branch -M main
+   git push -u origin main
+   ```
+2. Go to [vercel.com/new](https://vercel.com/new), import your repository, and click **Deploy**.
+3. Share the live `https://<your-project>.vercel.app` URL with your family!
 
 ---
 

@@ -14,6 +14,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <!-- Canvas Confetti CDN -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+  <!-- Firebase App & Firestore SDKs (v10 compat) for Free Cloud Database Sync -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <link rel="stylesheet" href="style.css">
   <script>
     tailwind.config = {
@@ -73,6 +76,12 @@
 
       <!-- Header Actions -->
       <div class="flex items-center flex-wrap gap-2.5">
+        <!-- Cloud Sync Status Badge -->
+        <button id="openCloudModalBtn" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700" title="Configure Cloud Database">
+          <span id="cloudStatusDot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+          <span id="cloudStatusText">Local Only</span>
+        </button>
+
         <!-- Manage Members Button -->
         <button id="manageMembersBtn" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
           <span>👥</span> Members (<span id="memberCountBadge">2</span>)
@@ -93,7 +102,14 @@
           <button id="moreActionsBtn" class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition" title="More Options">
             ⚙️
           </button>
-          <div id="moreActionsMenu" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-50 text-xs">
+          <div id="moreActionsMenu" class="hidden absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-50 text-xs">
+            <button id="openCloudModalMenuBtn" class="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 flex items-center gap-2 font-medium">
+              ☁️ Cloud Sync Settings
+            </button>
+            <button id="manualSyncBtn" class="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 flex items-center gap-2">
+              🔄 Sync Cloud Now
+            </button>
+            <div class="border-t border-slate-100 my-1"></div>
             <button id="exportCsvBtn" class="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 flex items-center gap-2">
               📊 Export to Excel / CSV
             </button>
@@ -614,6 +630,129 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal 5: Free Cloud Database Sync Modal -->
+  <div id="cloudModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scaleUp">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <span>☁️</span> Free Cloud Database & Multi-Device Sync
+        </h3>
+        <button id="closeCloudModalBtn" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg text-lg">✕</button>
+      </div>
+
+      <!-- Current Sync Status Indicator -->
+      <div id="cloudStatusBanner" class="p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 bg-slate-50 border-slate-200 text-slate-700">
+        <div class="flex items-center gap-2.5">
+          <span id="cloudStatusIcon" class="text-lg">⚪</span>
+          <div>
+            <div id="cloudStatusTitle" class="font-bold text-slate-800">Local Storage Mode</div>
+            <div id="cloudStatusSubtitle" class="text-[11px] text-slate-500">Expenses are currently stored only on this browser.</div>
+          </div>
+        </div>
+        <button id="disconnectCloudBtn" class="hidden text-xs text-red-600 hover:text-red-700 font-bold px-2.5 py-1 bg-red-50 hover:bg-red-100 rounded-lg transition">
+          Disconnect
+        </button>
+      </div>
+
+      <!-- Sync Method Tabs -->
+      <div class="flex border-b border-slate-200 text-xs font-bold">
+        <button id="cloudTabInstantBtn" class="py-2 px-3 border-b-2 border-emerald-600 text-emerald-700">
+          ⚡ Instant Cloud Sync (Zero Setup)
+        </button>
+        <button id="cloudTabFirebaseBtn" class="py-2 px-3 border-b-2 border-transparent text-slate-500 hover:text-slate-800">
+          🔥 Google Firebase Firestore
+        </button>
+      </div>
+
+      <!-- Tab Content 1: Instant Cloud Sync -->
+      <div id="cloudTabInstantContent" class="space-y-3.5 text-xs">
+        <p class="text-slate-600">
+          Sync your expenses across all family members' phones and PCs instantly using a shared <strong>Household Room Code</strong>. No account or credit card required!
+        </p>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1" for="instantHouseholdCode">Household Room Code *</label>
+          <div class="flex gap-2">
+            <input type="text" id="instantHouseholdCode" placeholder="e.g. sharma-family-2026" class="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <button type="button" id="generateRandomRoomBtn" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold transition text-xs">
+              Random Code
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1">
+            💡 Share this exact code with your family member on their phone so both devices sync to the same shared database!
+          </p>
+        </div>
+
+        <div class="flex items-center justify-end gap-2.5 pt-2">
+          <button type="button" id="connectInstantBtn" class="w-full py-2.5 px-4 text-white bg-emerald-600 hover:bg-emerald-700 font-bold rounded-lg shadow-sm shadow-emerald-600/30 transition text-xs flex items-center justify-center gap-1.5">
+            <span>⚡</span> Connect & Sync Household
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab Content 2: Google Firebase Firestore -->
+      <div id="cloudTabFirebaseContent" class="hidden space-y-3 text-xs">
+        <p class="text-slate-600">
+          Connect your own 100% free <strong>Google Cloud Firestore</strong> database for real-time WebSocket syncing (instant live updates on screen without refreshing).
+        </p>
+
+        <form id="firebaseConfigForm" class="space-y-2.5">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-0.5" for="firebaseHouseholdId">Household ID *</label>
+            <input type="text" id="firebaseHouseholdId" required placeholder="e.g. my-home-ledger" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-0.5" for="firebaseProjectId">Project ID *</label>
+              <input type="text" id="firebaseProjectId" required placeholder="my-expense-project" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-0.5" for="firebaseApiKey">API Key *</label>
+              <input type="text" id="firebaseApiKey" required placeholder="AIzaSy..." class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-semibold text-slate-700 mb-0.5" for="firebaseAppId">App ID (optional)</label>
+            <input type="text" id="firebaseAppId" placeholder="1:123456789:web:abcdef..." class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+
+          <details class="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+            <summary class="font-semibold text-slate-700 cursor-pointer text-[11px]">
+              📘 How to get free Google Firebase credentials (takes 2 min)
+            </summary>
+            <ol class="list-decimal pl-4 mt-2 space-y-1 text-[11px] text-slate-600">
+              <li>Open <a href="https://console.firebase.google.com" target="_blank" class="text-emerald-600 font-semibold underline">Firebase Console</a> & click <strong>Create a project</strong> (free).</li>
+              <li>Go to <strong>Build > Firestore Database > Create Database</strong> (Start in <em>Test Mode</em>).</li>
+              <li>Under Project Settings (gear icon), click <strong>Web app (&lt;/&gt;)</strong> to copy your `projectId` and `apiKey`.</li>
+            </ol>
+          </details>
+
+          <div class="flex items-center justify-end gap-2.5 pt-2">
+            <button type="submit" class="w-full py-2.5 px-4 text-white bg-indigo-600 hover:bg-indigo-700 font-bold rounded-lg shadow-sm shadow-indigo-600/30 transition text-xs flex items-center justify-center gap-1.5">
+              <span>🔥</span> Connect Google Firestore
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Cloud Utilities (Push/Pull) -->
+      <div id="cloudSyncActions" class="hidden border-t border-slate-100 pt-3 flex items-center justify-between text-xs">
+        <span class="text-slate-500 text-[11px]">Manual Sync:</span>
+        <div class="flex gap-2">
+          <button id="forcePullFromCloudBtn" class="px-2.5 py-1 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded font-semibold transition text-[11px]">
+            ⬇️ Pull Cloud Data
+          </button>
+          <button id="forcePushToCloudBtn" class="px-2.5 py-1 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded font-semibold transition text-[11px]">
+            ⬆️ Push Local Data
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 
